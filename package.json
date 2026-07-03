@@ -1,0 +1,28 @@
+{
+  "name": "c02-fuzz",
+  "version": "0.1.0",
+  "description": "Differential testing for the C02 language",
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "tsx src/main.ts",
+    "check:links": "node scripts/check-md-links.mjs",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jackwthake/C02-fuzz.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/jackwthake/C02-fuzz/issues"
+  },
+  "homepage": "https://github.com/jackwthake/C02-fuzz#readme",
+  "devDependencies": {
+    "tsx": "^4.22.5",
+    "typescript": "^6.0.3"
+  }
+}
