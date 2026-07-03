@@ -252,8 +252,19 @@ type-checking site (initializers, assignment, `return`, call arguments,
 binary operands, struct-init fields). In order:
 
 1. If `actual` is the **bare integer literal `0`** used with no other type
-   information (the "null-literal" — §3.4), **compatible** —
-   unconditionally, regardless of `expected`.
+   information (the "null-literal" — §3.4) **and `expected` is a pointer
+   type** (any `ptr_depth >= 1`, including `void*`), **compatible** —
+   unconditionally, regardless of pointee type or depth (the
+   null-pointer-constant idiom). This carve-out exists because the
+   literal's own inferred type — "null type", `void` at `ptr_depth 1`
+   (§3.4) — would otherwise fail rule 6's base-kind match against a
+   concrete pointee like `u8`. For a **non-pointer** `expected` (a scalar or
+   a by-value struct), the literal `0` is intended to get no special
+   exemption: its `void`-at-`ptr_depth-1` inferred type is `is_ptr = true`,
+   so it should be rejected by rule 3 like any other pointer-vs-non-pointer
+   mismatch — `Point p = 0;` is not meant to be a well-formed program (see
+   [S-17](DEVIATIONS.md#s-17-bare-literal-0-bypasses-the-destination-type-check-entirely)
+   for how `cc02` actually handles this today).
 2. Else if `expected` is `void*` and `actual` is *any* pointer type,
    **compatible** — regardless of pointee type or pointer depth.
 3. Else if `expected.is_ptr != actual.is_ptr`, **not compatible**.
@@ -281,6 +292,14 @@ type/depth (rules 3–4) — **not** compatible with a non-pointer destination.
 > So a **named `void*` variable**, not just the literal `0`, is incorrectly
 > compatible with any destination type — including non-pointer scalars and
 > by-value structs.
+
+> ⚠ [S-17](DEVIATIONS.md#s-17-bare-literal-0-bypasses-the-destination-type-check-entirely):
+> the literal `0` itself has the same problem, independent of S-1 — `cc02`'s
+> compatibility check never inspects `expected`'s pointer-ness before
+> granting the literal its exemption, so `0` is accepted against *any*
+> destination, including a by-value struct (`Point p = 0;` compiles today).
+> This is not the intended design (§3.2 rule 1 above states the intended,
+> pointer-only scope).
 
 **Signedness is checked**, Implicit casting between signed and unsigned types is not allowed.
 

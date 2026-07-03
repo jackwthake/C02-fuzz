@@ -81,6 +81,7 @@ Severity legend:
 | [S-14](#s-14-struct-field-errors-arent-poisoned) | S | Source | A bad struct field can re-trigger diagnostics at every access site | n/a |
 | [S-15](#s-15-parameter-poisoning-doesnt-reach-the-function-signature) | S | Source | Call-site argument checks use the original, unpoisoned parameter type | n/a |
 | [S-16](#s-16-err_wrong_arg_type-is-dead-code) | S | Source | Argument type mismatches always report as generic `ERR_TYPE_MISMATCH` | [§8.1](SPEC.md#81-errors) |
+| [S-17](#s-17-bare-literal-0-bypasses-the-destination-type-check-entirely) | S | Executed | Literal `0` compatible with any destination, not just pointer types (e.g. `Point p = 0;`) | [§3.2](SPEC.md#32-type-compatibility) |
 
 ---
 
@@ -474,11 +475,12 @@ an ordinary pointer type. `cc02` doesn't draw that distinction: the literal
 internal type representation (`void`, pointer depth 1), and the
 type-compatibility check's very first rule fires on that shared
 representation unconditionally, without ever inspecting the destination
-type. So a genuine `void*` variable — not merely a null-pointer constant —
+type. So a genuine `void*` variable, exactly like the bare literal itself
+(see [S-17](#s-17-bare-literal-0-bypasses-the-destination-type-check-entirely)),
 is accepted as compatible with *any* destination, including non-pointer
 scalars and by-value structs. This is the single most consequential
 type-system gap in the language: it defeats static checking anywhere a
-`void*` value flows into a differently-shaped destination.
+`void*`-shaped value flows into a differently-shaped destination.
 
 ### S-2: No signedness checking
 
@@ -708,3 +710,29 @@ see `ERR_WRONG_ARG_TYPE` in compiler output; treat it as reserved/unused.
 
 *(Source: enum/renderer cross-reference against emission sites in
 `analyzer.c`; not independently executed.)*
+
+### S-17: Bare literal `0` bypasses the destination-type check entirely
+
+```c
+struct Point { u8 x; u8 y; }
+
+fn main() -> void {
+  Point p = 0;
+}
+```
+
+**Verified:** compiles with no diagnostic. `SPEC.md` §3.2 rule 1 exempts the
+bare literal `0` from ordinary type-checking only when `expected` is a
+pointer type — the null-pointer-constant idiom. A by-value struct (or any
+other non-pointer destination) is supposed to fall through to rule 3
+(`is_ptr` mismatch, since the literal's own inferred type is `void` at
+`ptr_depth 1`) and be rejected. `cc02`'s `is_types_compatible` never checks
+`expected`'s pointer-ness before granting the literal's exemption — it fires
+purely on `actual` being the literal `0`, regardless of what `expected` is.
+So `0` is accepted as an initializer/assignment/call-argument value for
+*any* destination type, including by-value structs, not just pointers. This
+is not intended design — confirmed directly against the parser/analyzer,
+not merely inferred from spec wording. Related to
+[S-1](#s-1-voidnull-literal-conflation), which documents the same
+missing-destination-check for non-literal `void*` *values*; this entry
+covers the base case of the literal itself.
