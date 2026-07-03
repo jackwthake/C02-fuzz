@@ -1,6 +1,7 @@
 # C02-fuzz
 
-[![docs](https://github.com/jackwthake/C02-fuzz/actions/workflows/docs.yml/badge.svg)](https://github.com/jackwthake/C02-fuzz/actions/workflows/docs.yml)
+[![main](https://github.com/jackwthake/C02-fuzz/actions/workflows/main.yml/badge.svg)](https://github.com/jackwthake/C02-fuzz/actions/workflows/main.yml)
+ [![docs](https://github.com/jackwthake/C02-fuzz/actions/workflows/docs.yml/badge.svg)](https://github.com/jackwthake/C02-fuzz/actions/workflows/docs.yml)
 
 Differential testing for the [C02](https://github.com/jackwthake/C02) language.
 

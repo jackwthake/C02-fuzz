@@ -86,6 +86,8 @@ function main(): void {
 
   console.log(result);
   console.log(astString);
+
+  process.exit(0); // Exit with success code
 }
 
 main();

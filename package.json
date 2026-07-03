@@ -22,6 +22,7 @@
   },
   "homepage": "https://github.com/jackwthake/C02-fuzz#readme",
   "devDependencies": {
+    "@types/node": "^26.1.0",
     "tsx": "^4.22.5",
     "typescript": "^6.0.3"
   }

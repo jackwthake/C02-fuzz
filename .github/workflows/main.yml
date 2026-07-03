@@ -1,0 +1,18 @@
+name: main
+
+on:
+  push:
+    paths: ["src/**", "package.json", "package-lock.json", "tsconfig.json"]
+  pull_request:
+    paths: ["src/**", "package.json", "package-lock.json", "tsconfig.json"]
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26
+      - run: npm ci
+      - run: npm start
