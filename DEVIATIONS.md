@@ -32,8 +32,9 @@ Severity legend:
   a reasonable program.
 - **P2** — robustness: a real gap, but latent or requiring an unusual
   program to trigger.
-- **S** — semantic laxity: the type checker accepts something a stricter
-  spec would reject.
+- **S** — semantic laxity: the analyzer accepts something the current spec
+  (`SPEC.md`) already requires it to reject or check — an implementation
+  gap in `cc02`, not a rule the spec leaves intentionally permissive.
 - **G** — grammar quirk: a parser/lexer-level surprise, not itself
   incorrect, but easy to trip over or silently discard information.
 
@@ -66,21 +67,20 @@ Severity legend:
 | [P2-7](#p2-7-pointer-arithmetic-is-unscaled) | P2 | Executed (bug_test.py) | Pointer arithmetic always steps by 1 byte regardless of pointee size | [§6.3](SPEC.md#63-binary-operators) |
 | [S-1](#s-1-voidnull-literal-conflation) | S | Executed | Any `void*` *value*, not just literal `0`, is compatible with any destination type | [§3.2](SPEC.md#32-type-compatibility) |
 | [S-2](#s-2-no-signedness-checking) | S | Source | `i8`↔`u8`, `i16`↔`u16` freely interconvert (width-only check) | [§3.2](SPEC.md#32-type-compatibility) |
-| [S-3](#s-3-pointer-arithmetic-is-order-sensitive) | S | Executed | `ptr + 5` compiles, `5 + ptr` is a type error | [§6.3](SPEC.md#63-binary-operators) |
-| [S-4](#s-4-pointer-difference-is-typed-as-a-pointer) | S | Source | `ptr - ptr` type-checks and yields a pointer-typed result | [§6.3](SPEC.md#63-binary-operators) |
-| [S-5](#s-5-casts-to-non-struct-types-are-unchecked) | S | Source | Casts to any non-struct destination have no relatedness check | [§3.3](SPEC.md#33-casts) |
-| [S-6](#s-6-lvalue-checking-is-shallow) | S | Source | Lvalue check is node-kind only, not chain-aware | [§7.3](SPEC.md#73-lvalues) |
-| [S-7](#s-7-struct-initializers-neednt-be-complete-or-unique) | S | Source | Omitted/duplicate struct-init fields aren't flagged | [§5.2](SPEC.md#52-struct-initializer-expressions) |
-| [S-8](#s-8-decl-cannot-prototype-a-same-file-definition) | S | Source | `decl` + same-file definition collide as `ERR_REDECLARATION` | [§4.6](SPEC.md#46-forward-declarations-decl) |
-| [S-9](#s-9-shadowing-check-is-asymmetric) | S | Source | Local `struct` decls aren't shadow-checked like vars/params are | [§7.2](SPEC.md#72-scope-stack--shadowing) |
-| [S-10](#s-10-mains-signature-is-unchecked) | S | Source | `main`'s return type/params are entirely unchecked | [§7.4](SPEC.md#74-main) |
-| [S-11](#s-11-asm-blocks-are-unvalidated) | S | Source | No analyzer-level check on `asm` mnemonic legality | [§5.7](SPEC.md#57-inline-assembly-asm) |
-| [S-12](#s-12-unused-variable-diagnostics-are-unimplemented) | S | Source | `WARN_UNUSED_*` exist in the enum but are never emitted | [§8.2](SPEC.md#82-warnings) |
-| [S-13](#s-13-missing-return-detection-is-shallow) | S | Source | Last-statement-kind check only, not control-flow analysis | [§7.5](SPEC.md#75-missing-return-detection) |
-| [S-14](#s-14-negation-doesnt-change-static-signedness) | S | Source | `-x` on a `u8` variable is still typed `u8`; double literal negation doesn't refold | [§3.4](SPEC.md#34-integer-literal-typing) |
-| [S-15](#s-15-struct-field-errors-arent-poisoned) | S | Source | A bad struct field can re-trigger diagnostics at every access site | n/a |
-| [S-16](#s-16-parameter-poisoning-doesnt-reach-the-function-signature) | S | Source | Call-site argument checks use the original, unpoisoned parameter type | n/a |
-| [S-17](#s-17-err_wrong_arg_type-is-dead-code) | S | Source | Argument type mismatches always report as generic `ERR_TYPE_MISMATCH` | [§8.1](SPEC.md#81-errors) |
+| [S-3](#s-3-pointer-arithmetic-is-order-sensitive) | S | Executed | `ptr + 5` compiles, `5 + ptr` is a type error (spec now requires both to compile) | [§6.3](SPEC.md#63-binary-operators) |
+| [S-4](#s-4-casts-to-non-struct-types-are-unchecked) | S | Source | Casts to any non-struct destination have no relatedness check | [§3.3](SPEC.md#33-casts) |
+| [S-5](#s-5-lvalue-checking-is-shallow) | S | Source | Lvalue check is node-kind only, not chain-aware | [§7.3](SPEC.md#73-lvalues) |
+| [S-6](#s-6-struct-initializers-neednt-be-complete-or-unique) | S | Source | Omitted/duplicate struct-init fields aren't flagged | [§5.2](SPEC.md#52-struct-initializer-expressions) |
+| [S-7](#s-7-decl-cannot-prototype-a-same-file-definition) | S | Source | `decl` + same-file definition collide as `ERR_REDECLARATION` | [§4.6](SPEC.md#46-forward-declarations-decl) |
+| [S-8](#s-8-shadowing-check-is-asymmetric) | S | Source | Local `struct` decls aren't shadow-checked like vars/params are | [§7.2](SPEC.md#72-scope-stack--shadowing) |
+| [S-9](#s-9-mains-signature-is-unchecked) | S | Source | `main`'s return type/params are entirely unchecked | [§7.4](SPEC.md#74-main) |
+| [S-10](#s-10-asm-blocks-are-unvalidated) | S | Source | No analyzer-level check on `asm` mnemonic legality | [§5.7](SPEC.md#57-inline-assembly-asm) |
+| [S-11](#s-11-unused-variable-diagnostics-are-unimplemented) | S | Source | `WARN_UNUSED_*` exist in the enum but are never emitted | [§8.2](SPEC.md#82-warnings) |
+| [S-12](#s-12-missing-return-detection-is-shallow) | S | Source | Last-statement-kind check only, not control-flow analysis | [§7.5](SPEC.md#75-missing-return-detection) |
+| [S-13](#s-13-negation-doesnt-change-static-signedness) | S | Source | `-x` on a `u8` variable is still typed `u8`; double literal negation doesn't refold | [§3.4](SPEC.md#34-integer-literal-typing) |
+| [S-14](#s-14-struct-field-errors-arent-poisoned) | S | Source | A bad struct field can re-trigger diagnostics at every access site | n/a |
+| [S-15](#s-15-parameter-poisoning-doesnt-reach-the-function-signature) | S | Source | Call-site argument checks use the original, unpoisoned parameter type | n/a |
+| [S-16](#s-16-err_wrong_arg_type-is-dead-code) | S | Source | Argument type mismatches always report as generic `ERR_TYPE_MISMATCH` | [§8.1](SPEC.md#81-errors) |
 
 ---
 
@@ -354,7 +354,7 @@ the operand is a field access or dereference, the lowered form is a
 temporary, not a named variable — the name lookup dereferences a small
 integer reinterpreted as a string pointer. **Verified:** `cc02` crashes
 with SIGSEGV (`strcmp` in the backtrace). The analyzer accepts this program
-— see [S-6](#s-6-lvalue-checking-is-shallow) for why. Even absent the crash,
+— see [S-5](#s-5-lvalue-checking-is-shallow) for why. Even absent the crash,
 the emitted code would be doubly wrong: address of a temp copy, plus
 [P0-7](#p0-7-writes-through-a-pointer-to-a-callers-local-are-undone-on-return)
 on top.
@@ -466,16 +466,19 @@ struct-pointer arithmetic, with no diagnostic at any stage.
 fn main() -> void { void *vp; u8 x = vp; }
 ```
 
-**Verified:** `cc02 --syntax-check-only` exits `0` — no diagnostic. The
-literal `0` and every `void*`-typed *value* (not just the literal) share
-one internal type representation (`void`, pointer depth 1), and the
-type-compatibility check's very first rule fires on that representation
-unconditionally, without ever inspecting the destination type. So a
-genuine `void*` variable — not merely a null-pointer constant — is accepted
-as compatible with *any* destination, including non-pointer scalars and
-by-value structs. This is the single most consequential type-system gap in
-the language: it defeats static checking anywhere a `void*` value flows
-into a differently-shaped destination.
+**Verified:** `cc02 --syntax-check-only` exits `0` — no diagnostic. `SPEC.md`
+§3.2 requires rule 1's unconditional compatibility to apply only to the bare
+literal `0`; a genuine `void*` value is supposed to be checked normally, as
+an ordinary pointer type. `cc02` doesn't draw that distinction: the literal
+`0` and every `void*`-typed *value* (not just the literal) share one
+internal type representation (`void`, pointer depth 1), and the
+type-compatibility check's very first rule fires on that shared
+representation unconditionally, without ever inspecting the destination
+type. So a genuine `void*` variable — not merely a null-pointer constant —
+is accepted as compatible with *any* destination, including non-pointer
+scalars and by-value structs. This is the single most consequential
+type-system gap in the language: it defeats static checking anywhere a
+`void*` value flows into a differently-shaped destination.
 
 ### S-2: No signedness checking
 
@@ -499,25 +502,21 @@ fn g(u8 *p) -> void { u8 *b = 5 + p; }   // type error (rc 5):
                                           // "expected u8, found u8*"
 ```
 
-**Verified both directions.** The pointer-arithmetic special case in binary
-operator resolution only checks `left.is_ptr` — a pointer on the *right*
-falls through to the generic compatibility check, which rejects mixing
-pointer and non-pointer operands. `ptr - ptr` (both sides pointers) doesn't
-hit the special case either (it explicitly requires the right operand to
-be non-pointer); see [S-4](#s-4-pointer-difference-is-typed-as-a-pointer).
-
-### S-4: Pointer difference is typed as a pointer
-
-`ptr - ptr` (both operands the same pointer type) falls through to the
-generic struct-name/kind/depth compatibility check — which two identically-
-typed pointers pass — so the expression type-checks, but the **result type
-is itself a pointer type**, not an integer/difference type. There is no
-notion of a pointer-difference numeric type anywhere in the type system.
+**Verified both directions.** `SPEC.md` §6.3 requires `int + ptr` to compile
+(addition is commutative), same as `ptr + int`. The pointer-arithmetic
+special case in binary operator resolution only checks `left.is_ptr` — a
+pointer on the *right* falls through to the generic compatibility check,
+which rejects mixing pointer and non-pointer operands, so the commutative
+form is unimplemented. `ptr - ptr` (both sides pointers) doesn't hit this
+special case either — it doesn't need to: with both operands the identical
+pointer type, the generic struct-name/kind/depth compatibility check already
+accepts it and produces the pointer-typed address-difference result the
+spec calls for (§6.3), so that case isn't a deviation.
 
 *(Source: `analyzer.c` `NODE_BINOP` resolution; not independently
 executed.)*
 
-### S-5: Casts to non-struct types are unchecked
+### S-4: Casts to non-struct types are unchecked
 
 `(type)expr` for any non-struct destination type is accepted regardless of
 the source expression's type — casting a struct to `u8`, or between
@@ -529,7 +528,7 @@ discarded. (Struct destinations *are* checked — see `SPEC.md` §3.3 for the
 *(Source: `NODE_CAST` handling in `analyzer.c`; not independently
 executed.)*
 
-### S-6: Lvalue-checking is shallow
+### S-5: Lvalue-checking is shallow
 
 ```c
 someFunctionCall().field = 5;   // accepted as an assignment target
@@ -547,7 +546,7 @@ like" one of the three lvalue shapes. This is the root enabler of
 downstream P1-1 crash is empirically confirmed and consistent with this
 explanation.)*
 
-### S-7: Struct initializers needn't be complete or unique
+### S-6: Struct initializers needn't be complete or unique
 
 ```c
 Point{ .x = 1 }              // .y silently left unset, no diagnostic
@@ -562,7 +561,7 @@ independently against the struct's field list.
 *(Source: `NODE_STRUCT_INIT` handling in `analyzer.c`; not independently
 executed.)*
 
-### S-8: `decl` cannot prototype a same-file definition
+### S-7: `decl` cannot prototype a same-file definition
 
 ```c
 decl fn foo(u8 x) -> void;
@@ -579,7 +578,7 @@ cross-translation-unit references (multi-file linking); the familiar C
 *(Source: `pass1_register_globals` in `analyzer.c`; not independently
 executed.)*
 
-### S-9: Shadowing check is asymmetric
+### S-8: Shadowing check is asymmetric
 
 A local variable or parameter that shadows a name visible in *any*
 enclosing scope (including global) is rejected
@@ -593,15 +592,19 @@ an outer-scope variable, function, global, or another struct, even though
 *(Source: `declare_local_variable` vs. the local-`NODE_STRUCT_DECL` path in
 `analyzer.c`; not independently executed.)*
 
-### S-10: `main`'s signature is unchecked
+### S-9: `main`'s signature is unchecked
 
-Only "a symbol named `main` exists and is a function" is verified — any
-return type and any parameter list/count are accepted with no diagnostic.
+`SPEC.md` §7.4 requires exactly `fn main() -> void { ... }` — zero
+parameters, `void` return, and an actual definition (not a `decl`). `cc02`
+only verifies that "a symbol named `main` exists and is a function" — any
+return type and any parameter list/count are accepted with no diagnostic,
+and a `main` introduced solely via `decl` (with no matching same-file
+definition) satisfies the same check a real definition would.
 
 *(Source: the end-of-`analyze()` check in `analyzer.c`; not independently
 executed.)*
 
-### S-11: `asm` blocks are unvalidated
+### S-10: `asm` blocks are unvalidated
 
 The analyzer performs zero semantic checking on `asm { ... }` blocks —
 mnemonic legality is deferred entirely to codegen (explicitly noted in-code
@@ -611,7 +614,7 @@ analysis-stage diagnostic.
 *(Source: `analyze_stmt`'s `NODE_ASM_BLOCK` case in `analyzer.c`; not
 independently executed.)*
 
-### S-12: Unused-variable diagnostics are unimplemented
+### S-11: Unused-variable diagnostics are unimplemented
 
 `WARN_UNUSED_VARIABLE`, `WARN_UNUSED_FUNCTION`, `WARN_UNUSED_STRUCT`, and
 `WARN_UNUSED_FIELD` are all defined in the warning enum and have
@@ -624,7 +627,7 @@ exist yet.
 *(Source: `print_warning` in `errors.c` cross-referenced against
 `analyzer.c`; not independently executed.)*
 
-### S-13: Missing-return detection is shallow
+### S-12: Missing-return detection is shallow
 
 ```c
 fn f(u8 x) -> u8 {
@@ -647,7 +650,7 @@ easily-misread positive.
 
 *(Source: `stmt_may_return` in `analyzer.c`; not independently executed.)*
 
-### S-14: Negation doesn't change static signedness
+### S-13: Negation doesn't change static signedness
 
 ```c
 u8 x = 5;
@@ -666,7 +669,7 @@ doesn't re-trigger that special case.
 *(Source: literal-retyping logic in `resolve_expr_type`'s `NODE_UNARY`
 case, `analyzer.c`; not independently executed.)*
 
-### S-15: Struct field errors aren't poisoned
+### S-14: Struct field errors aren't poisoned
 
 Top-level declarations (vars/globals/registers/params) that fail type
 validation are poisoned to an error type in their symbol-table entry, so
@@ -680,7 +683,7 @@ declaration and can trigger further downstream diagnostics.
 *(Source: `validate_toplevel_types`'s per-field loop in `analyzer.c`; not
 independently executed.)*
 
-### S-16: Parameter poisoning doesn't reach the function signature
+### S-15: Parameter poisoning doesn't reach the function signature
 
 When a parameter's declared type fails validation, the poisoned type is
 written into a fresh local-scope symbol used for checking *uses of that
@@ -695,7 +698,7 @@ poisoned once, unlike the treatment globals/registers get.
 trigger in practice since it requires an invalid struct name in a
 parameter's type.)*
 
-### S-17: `ERR_WRONG_ARG_TYPE` is dead code
+### S-16: `ERR_WRONG_ARG_TYPE` is dead code
 
 `ERR_WRONG_ARG_TYPE` is defined in the error enum and has rendering support
 in `errors.c`, but is never actually constructed anywhere in `analyzer.c`

@@ -251,7 +251,8 @@ There is no array type, no function-pointer type, no boolean type
 type-checking site (initializers, assignment, `return`, call arguments,
 binary operands, struct-init fields). In order:
 
-1. If `actual` is the null-literal type (see below), **compatible** —
+1. If `actual` is the **bare integer literal `0`** used with no other type
+   information (the "null-literal" — §3.4), **compatible** —
    unconditionally, regardless of `expected`.
 2. Else if `expected` is `void*` and `actual` is *any* pointer type,
    **compatible** — regardless of pointee type or pointer depth.
@@ -266,14 +267,20 @@ binary operands, struct-init fields). In order:
    widening only (`u8`→`u16` OK; `u16`→`u8` requires an explicit cast).
    `width` is 1 for `u8`/`i8`, 2 for `u16`/`i16`.
 
-**The literal `0` and every `void*`-typed value share one internal
-representation** ("the null type": `void` with pointer depth 1), and rule 1
-above fires on that representation *unconditionally* — not gated on
-`expected` being a pointer type at all.
+Rule 1 is exclusive to the **bare literal `0`** — it does not extend to a
+`void*`-typed variable or any other non-literal expression of type `void*`.
+A genuine `void*` value is an ordinary pointer (depth 1, pointee `void`) and
+is checked like any other pointer under rules 2–4: compatible with a
+`void*`-expecting destination (rule 2), or with a matching pointer
+type/depth (rules 3–4) — **not** compatible with a non-pointer destination.
 
-> ⚠ [S-1](DEVIATIONS.md#s-1-voidnull-literal-conflation): a **named
-> `void*` variable**, not just the literal `0`, is compatible with any
-> destination type — including non-pointer scalars and by-value structs.
+> ⚠ [S-1](DEVIATIONS.md#s-1-voidnull-literal-conflation): `cc02` doesn't
+> draw this distinction — internally, the literal `0` and every `void*`-typed
+> *value* share one representation ("the null type": `void` with pointer
+> depth 1), and rule 1 fires on that shared representation unconditionally.
+> So a **named `void*` variable**, not just the literal `0`, is incorrectly
+> compatible with any destination type — including non-pointer scalars and
+> by-value structs.
 
 **Signedness is checked**, Implicit casting between signed and unsigned types is not allowed.
 
@@ -319,7 +326,7 @@ signed type from the negated value.
 **negating an unsigned type promotes the result to its signed counterpart**: `-x` where x is `u8` promotes the result to a `i8`.
 The result follows standard two's-complement wraparound, matching the width's existing overflow behavior (§Appendix B); no range check is performed at compile or runtime.
 
-> ⚠ [S-14](DEVIATIONS.md#s-14-negation-doesnt-change-static-signedness):
+> ⚠ [S-13](DEVIATIONS.md#s-13-negation-doesnt-change-static-signedness):
 > negating a *variable* never changes its static type (`-x` on a `u8` is
 > still typed `u8`), and double literal negation (`-(-5)`) doesn't re-fold
 > to the positive literal's type.
@@ -442,7 +449,7 @@ decl u8 counter;
 - Intended for cross-translation-unit references (multi-file linking,
   incremental `-c` compilation).
 
-> ⚠ [S-8](DEVIATIONS.md#s-8-decl-cannot-prototype-a-same-file-definition):
+> ⚠ [S-7](DEVIATIONS.md#s-7-decl-cannot-prototype-a-same-file-definition):
 > a `decl` followed by a same-file definition of the same name is rejected
 > as `ERR_REDECLARATION` — `decl` is cross-file only, not an in-file
 > prototype idiom.
@@ -487,7 +494,7 @@ RHS (`foo(Point{.x=1,.y=2})` is syntactically legal).
 - Fields: `.name = expr`, comma-separated, **trailing comma tolerated**
   (`Point{ .x = 1, }` parses).
 - Field order in the initializer need not match declaration order.
-- ⚠ [S-7](DEVIATIONS.md#s-7-struct-initializers-neednt-be-complete-or-unique):
+- ⚠ [S-6](DEVIATIONS.md#s-6-struct-initializers-neednt-be-complete-or-unique):
   omitted fields produce no diagnostic, and a duplicate field entry is
   never flagged.
 
@@ -589,7 +596,7 @@ asm {
   the currently-supported mnemonic list).
 - ⚠ The analyzer performs **no check at all** on `asm` blocks — an invalid
   mnemonic produces no semantic-analysis diagnostic. See
-  [S-11](DEVIATIONS.md#s-11-asm-blocks-are-unvalidated).
+  [S-10](DEVIATIONS.md#s-10-asm-blocks-are-unvalidated).
 
 ### 5.8 Prefix-Only Increment/Decrement
 
@@ -632,18 +639,25 @@ Right-associative (self-recursive, so they stack: `!!x`, `--*p`, `&*p`):
 
 `|| && | ^ & == != < > <= >= << >> + - * / %` — standard meanings.
 
-- **Pointer arithmetic** (`ptr + int`, `ptr - int`) produces a pointer of
-  the same type as `ptr`, bypassing the normal type-compatibility check
-  entirely (any integer width/signedness accepted as the offset) — **but
-  only when the pointer is the left operand.**
+- **Pointer arithmetic**:
+  - `ptr + int` and `int + ptr` both produce a pointer of the same type as
+    the pointer operand, bypassing the normal type-compatibility check
+    entirely (any integer width/signedness accepted as the offset) —
+    addition is **commutative**, regardless of which side the pointer is on.
+  - `ptr - int` likewise produces a pointer of the same type as `ptr`;
+    `int - ptr` is a type error — subtraction isn't commutative, there's no
+    sensible "int minus pointer."
+  - `ptr - ptr` (both operands the same pointer type) also produces a
+    pointer of that same type — the address difference, not an integer
+    count.
   > ⚠ [S-3](DEVIATIONS.md#s-3-pointer-arithmetic-is-order-sensitive):
-  > `ptr + 5` compiles; `5 + ptr` is a compile error.
-  > [S-4](DEVIATIONS.md#s-4-pointer-difference-is-typed-as-a-pointer):
-  > `ptr - ptr` type-checks and yields a pointer-typed result, not an
-  > integer difference.
+  > `cc02`'s binary-operator special case only checks `left.is_ptr` — so
+  > `ptr + 5` compiles but `5 + ptr` is rejected as a type error; the
+  > commutative `int + ptr` form isn't implemented.
   > ⚠ [P2-7](DEVIATIONS.md#p2-7-pointer-arithmetic-is-unscaled): pointer
   > arithmetic is unscaled at codegen time — `p + 1` always advances one
-  > byte regardless of pointee size.
+  > byte regardless of pointee size (this applies to `ptr - ptr`'s address
+  > difference too — it's a raw byte count, not scaled by pointee size).
 - Struct-typed operands are **not rejected** by the analyzer as long as both
   sides name the same struct — `pointA + pointB` "type-checks." See
   [P2-2](DEVIATIONS.md#p2-2-struct-values-accepted-as-arithmeticcondition-operands).
@@ -778,7 +792,7 @@ namesake's storage; this rule exists to prevent that, not merely for
 style. Two **sibling** scopes (e.g. two separate `for (u8 i...)` loops) are
 unaffected, since each is fully popped before the next is pushed.
 
-> ⚠ [S-9](DEVIATIONS.md#s-9-shadowing-check-is-asymmetric): this check
+> ⚠ [S-8](DEVIATIONS.md#s-8-shadowing-check-is-asymmetric): this check
 > applies only to variables and parameters — a struct declared inside a
 > function body is only checked for same-scope redeclaration, never
 > outer-scope shadowing.
@@ -791,7 +805,7 @@ lvalue. Lvalue-ness is checked **structurally and shallowly**: the
 or `NODE_DEREF`. There is no recursion into whether the *base* of a
 field-access/deref chain is itself addressable storage.
 
-> ⚠ [S-6](DEVIATIONS.md#s-6-lvalue-checking-is-shallow):
+> ⚠ [S-5](DEVIATIONS.md#s-5-lvalue-checking-is-shallow):
 > `someFunctionCall().field = 5;` is accepted as a valid assignment target
 > purely because the outermost node "looks like" an lvalue shape — this is
 > exactly what lets `&p.x` reach codegen and crash the compiler
@@ -799,10 +813,18 @@ field-access/deref chain is itself addressable storage.
 
 ### 7.4 `main`
 
-Exactly one symbol named `main`, which must be a function, is required — no
-other constraint. **`main`'s return type and parameter list are completely
-unchecked** (any signature is accepted silently). See
-[S-10](DEVIATIONS.md#s-10-mains-signature-is-unchecked).
+Exactly one **function definition** (not a `decl` forward declaration —
+§4.6) named exactly `main` is required, with the signature
+`fn main() -> void { ... }` — zero parameters, return type exactly `void`.
+No other shape satisfies this: a different parameter list, a different
+return type, or `main` introduced only via `decl` with no matching same-file
+definition all fail to satisfy the requirement.
+
+> ⚠ [S-9](DEVIATIONS.md#s-9-mains-signature-is-unchecked): `cc02` only
+> verifies that a symbol named `main` exists and is a function — any return
+> type and any parameter list/count are accepted silently, and a `main`
+> introduced solely via `decl` (with no defining body) satisfies the check
+> just as well as a real definition.
 
 ### 7.5 Missing-Return Detection
 
@@ -832,7 +854,7 @@ fn h() -> u8 {
 
 There is no control-flow/path-coverage analysis — do not rely on the
 absence of `ERR_MISSING_RETURN` as proof every path returns. See
-[S-13](DEVIATIONS.md#s-13-missing-return-detection-is-shallow).
+[S-12](DEVIATIONS.md#s-12-missing-return-detection-is-shallow).
 
 ---
 
@@ -864,14 +886,14 @@ unlike the parser — §8.3).
 | `ERR_INCOMPLETE_STRUCT_FIELD` | By-value struct field is self-referential, or names a struct not declared earlier in the file (§4.4). |
 | `ERR_BREAK_OUTSIDE_LOOP` / `ERR_CONTINUE_OUTSIDE_LOOP` | `break`/`continue` with loop-depth 0. |
 | `ERR_STRUCT_CAST_BY_VALUE` | `(StructName)expr` cast with no pointer level. |
-| `ERR_WRONG_ARG_TYPE` | Defined in the enum, but **never actually emitted** — `ERR_TYPE_MISMATCH` (context `"function call"`) is used instead. Treat as dead/reserved. ([S-17](DEVIATIONS.md#s-17-err_wrong_arg_type-is-dead-code)) |
+| `ERR_WRONG_ARG_TYPE` | Defined in the enum, but **never actually emitted** — `ERR_TYPE_MISMATCH` (context `"function call"`) is used instead. Treat as dead/reserved. ([S-16](DEVIATIONS.md#s-16-err_wrong_arg_type-is-dead-code)) |
 
 ### 8.2 Warnings
 
 | Warning | Fires when | Notes |
 |---|---|---|
 | `WARN_INVALID_INTERRUPT` | `interrupt`-qualified function fails name/return-type/param-count checks (§4.2). | The only warning that actually prints. |
-| `WARN_UNUSED_VARIABLE` / `_FUNCTION` / `_STRUCT` / `_FIELD` | Never — defined in the enum with print-dispatch plumbing, but no code path ever constructs one (`// unimplemented`). | Do not rely on these appearing; no unused-anything detection exists today. ([S-12](DEVIATIONS.md#s-12-unused-variable-diagnostics-are-unimplemented)) |
+| `WARN_UNUSED_VARIABLE` / `_FUNCTION` / `_STRUCT` / `_FIELD` | Never — defined in the enum with print-dispatch plumbing, but no code path ever constructs one (`// unimplemented`). | Do not rely on these appearing; no unused-anything detection exists today. ([S-11](DEVIATIONS.md#s-11-unused-variable-diagnostics-are-unimplemented)) |
 
 ### 8.3 Parser Errors
 
