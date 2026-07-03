@@ -275,8 +275,9 @@ above fires on that representation *unconditionally* — not gated on
 > `void*` variable**, not just the literal `0`, is compatible with any
 > destination type — including non-pointer scalars and by-value structs.
 
-**Signedness is not checked**, only width — rule 6 treats `i8`/`u8` (and
-`i16`/`u16`) as mutually compatible in both directions.
+**Signedness is checked**, Implicit casting between signed and unsigned types is not allowed.
+
+**BinOP expression with mixed signedness**: A binary operator with one signed and one unsigned operand is a type error; an explicit cast on one operand is required.
 
 > ⚠ [S-2](DEVIATIONS.md#s-2-no-signedness-checking): `i8 x = 200;` and
 > `u8 y = someI8Var;` both pass with no diagnostic — width is checked, sign
@@ -296,7 +297,7 @@ above fires on that representation *unconditionally* — not gated on
 
 ### 3.4 Integer Literal Typing
 
-The smallest type that fits the literal's *value* (not its written form):
+When no typed context is available, the literal's value determines its type as follows:
 
 | Range | Type |
 |---|---|
@@ -311,7 +312,14 @@ Negative literals only arise as `NODE_UNARY(-)` wrapping a `NODE_NUMBER`
 directly; the analyzer special-cases exactly that AST shape to re-derive a
 signed type from the negated value.
 
-> ⚠ [S-15](DEVIATIONS.md#s-15-negation-doesnt-change-static-signedness):
+**Untyped literals**: An untyped literal adopts the signedness/width of its context (assignment target, binary operand, call argument); with no context, it defaults to the narrowest type that fits.
+
+**Explicit Casting between signed and unsigned**: An explicit signed ↔ unsigned cast is bit-pattern-preserving (two's-complement reinterpretation), matching the wraparound semantics used elsewhere in the integer model.
+
+**negating an unsigned type promotes the result to its signed counterpart**: `-x` where x is `u8` promotes the result to a `i8`.
+The result follows standard two's-complement wraparound, matching the width's existing overflow behavior (§Appendix B); no range check is performed at compile or runtime.
+
+> ⚠ [S-14](DEVIATIONS.md#s-14-negation-doesnt-change-static-signedness):
 > negating a *variable* never changes its static type (`-x` on a `u8` is
 > still typed `u8`), and double literal negation (`-(-5)`) doesn't re-fold
 > to the positive literal's type.
@@ -350,12 +358,9 @@ fn irq() interrupt -> void { ... }
   (`WARN_INVALID_INTERRUPT`), not an error** — the function compiles as an
   ordinary callable function, with `is_interrupt` cleared before codegen
   ever sees it. The program **builds successfully**; only stderr shows the
-  warning.
-
-  > ⚠ [S-11](DEVIATIONS.md#s-11-interrupt-qualifier-failure-is-a-warning-not-an-error):
-  > a typo like `fn Nmi() interrupt -> void { ... }` builds successfully —
-  > the vector table simply doesn't point at the intended handler.
-
+  warning. A conscious design choice, not a gap: a typo like
+  `fn Nmi() interrupt -> void { ... }` builds successfully, and the vector
+  table simply doesn't point at the intended handler — watch stderr.
 - `irq()` is maskable (`__enable_interrupts()`, a compiler builtin
   implemented as `asm { CLI }`, must be called before it fires); `nmi()` is
   non-maskable.
@@ -584,7 +589,7 @@ asm {
   the currently-supported mnemonic list).
 - ⚠ The analyzer performs **no check at all** on `asm` blocks — an invalid
   mnemonic produces no semantic-analysis diagnostic. See
-  [S-12](DEVIATIONS.md#s-12-asm-blocks-are-unvalidated).
+  [S-11](DEVIATIONS.md#s-11-asm-blocks-are-unvalidated).
 
 ### 5.8 Prefix-Only Increment/Decrement
 
@@ -827,7 +832,7 @@ fn h() -> u8 {
 
 There is no control-flow/path-coverage analysis — do not rely on the
 absence of `ERR_MISSING_RETURN` as proof every path returns. See
-[S-14](DEVIATIONS.md#s-14-missing-return-detection-is-shallow).
+[S-13](DEVIATIONS.md#s-13-missing-return-detection-is-shallow).
 
 ---
 
@@ -859,14 +864,14 @@ unlike the parser — §8.3).
 | `ERR_INCOMPLETE_STRUCT_FIELD` | By-value struct field is self-referential, or names a struct not declared earlier in the file (§4.4). |
 | `ERR_BREAK_OUTSIDE_LOOP` / `ERR_CONTINUE_OUTSIDE_LOOP` | `break`/`continue` with loop-depth 0. |
 | `ERR_STRUCT_CAST_BY_VALUE` | `(StructName)expr` cast with no pointer level. |
-| `ERR_WRONG_ARG_TYPE` | Defined in the enum, but **never actually emitted** — `ERR_TYPE_MISMATCH` (context `"function call"`) is used instead. Treat as dead/reserved. ([S-18](DEVIATIONS.md#s-18-err_wrong_arg_type-is-dead-code)) |
+| `ERR_WRONG_ARG_TYPE` | Defined in the enum, but **never actually emitted** — `ERR_TYPE_MISMATCH` (context `"function call"`) is used instead. Treat as dead/reserved. ([S-17](DEVIATIONS.md#s-17-err_wrong_arg_type-is-dead-code)) |
 
 ### 8.2 Warnings
 
 | Warning | Fires when | Notes |
 |---|---|---|
 | `WARN_INVALID_INTERRUPT` | `interrupt`-qualified function fails name/return-type/param-count checks (§4.2). | The only warning that actually prints. |
-| `WARN_UNUSED_VARIABLE` / `_FUNCTION` / `_STRUCT` / `_FIELD` | Never — defined in the enum with print-dispatch plumbing, but no code path ever constructs one (`// unimplemented`). | Do not rely on these appearing; no unused-anything detection exists today. ([S-13](DEVIATIONS.md#s-13-unused-variable-diagnostics-are-unimplemented)) |
+| `WARN_UNUSED_VARIABLE` / `_FUNCTION` / `_STRUCT` / `_FIELD` | Never — defined in the enum with print-dispatch plumbing, but no code path ever constructs one (`// unimplemented`). | Do not rely on these appearing; no unused-anything detection exists today. ([S-12](DEVIATIONS.md#s-12-unused-variable-diagnostics-are-unimplemented)) |
 
 ### 8.3 Parser Errors
 

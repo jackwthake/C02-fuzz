@@ -74,14 +74,13 @@ Severity legend:
 | [S-8](#s-8-decl-cannot-prototype-a-same-file-definition) | S | Source | `decl` + same-file definition collide as `ERR_REDECLARATION` | [§4.6](SPEC.md#46-forward-declarations-decl) |
 | [S-9](#s-9-shadowing-check-is-asymmetric) | S | Source | Local `struct` decls aren't shadow-checked like vars/params are | [§7.2](SPEC.md#72-scope-stack--shadowing) |
 | [S-10](#s-10-mains-signature-is-unchecked) | S | Source | `main`'s return type/params are entirely unchecked | [§7.4](SPEC.md#74-main) |
-| [S-11](#s-11-interrupt-qualifier-failure-is-a-warning-not-an-error) | S | Source | A mis-signatured `interrupt` function builds silently as an ordinary function | [§4.2](SPEC.md#42-interrupt-functions) |
-| [S-12](#s-12-asm-blocks-are-unvalidated) | S | Source | No analyzer-level check on `asm` mnemonic legality | [§5.7](SPEC.md#57-inline-assembly-asm) |
-| [S-13](#s-13-unused-variable-diagnostics-are-unimplemented) | S | Source | `WARN_UNUSED_*` exist in the enum but are never emitted | [§8.2](SPEC.md#82-warnings) |
-| [S-14](#s-14-missing-return-detection-is-shallow) | S | Source | Last-statement-kind check only, not control-flow analysis | [§7.5](SPEC.md#75-missing-return-detection) |
-| [S-15](#s-15-negation-doesnt-change-static-signedness) | S | Source | `-x` on a `u8` variable is still typed `u8`; double literal negation doesn't refold | [§3.4](SPEC.md#34-integer-literal-typing) |
-| [S-16](#s-16-struct-field-errors-arent-poisoned) | S | Source | A bad struct field can re-trigger diagnostics at every access site | n/a |
-| [S-17](#s-17-parameter-poisoning-doesnt-reach-the-function-signature) | S | Source | Call-site argument checks use the original, unpoisoned parameter type | n/a |
-| [S-18](#s-18-err_wrong_arg_type-is-dead-code) | S | Source | Argument type mismatches always report as generic `ERR_TYPE_MISMATCH` | [§8.1](SPEC.md#81-errors) |
+| [S-11](#s-11-asm-blocks-are-unvalidated) | S | Source | No analyzer-level check on `asm` mnemonic legality | [§5.7](SPEC.md#57-inline-assembly-asm) |
+| [S-12](#s-12-unused-variable-diagnostics-are-unimplemented) | S | Source | `WARN_UNUSED_*` exist in the enum but are never emitted | [§8.2](SPEC.md#82-warnings) |
+| [S-13](#s-13-missing-return-detection-is-shallow) | S | Source | Last-statement-kind check only, not control-flow analysis | [§7.5](SPEC.md#75-missing-return-detection) |
+| [S-14](#s-14-negation-doesnt-change-static-signedness) | S | Source | `-x` on a `u8` variable is still typed `u8`; double literal negation doesn't refold | [§3.4](SPEC.md#34-integer-literal-typing) |
+| [S-15](#s-15-struct-field-errors-arent-poisoned) | S | Source | A bad struct field can re-trigger diagnostics at every access site | n/a |
+| [S-16](#s-16-parameter-poisoning-doesnt-reach-the-function-signature) | S | Source | Call-site argument checks use the original, unpoisoned parameter type | n/a |
+| [S-17](#s-17-err_wrong_arg_type-is-dead-code) | S | Source | Argument type mismatches always report as generic `ERR_TYPE_MISMATCH` | [§8.1](SPEC.md#81-errors) |
 
 ---
 
@@ -602,23 +601,7 @@ return type and any parameter list/count are accepted with no diagnostic.
 *(Source: the end-of-`analyze()` check in `analyzer.c`; not independently
 executed.)*
 
-### S-11: `interrupt`-qualifier failure is a warning, not an error
-
-A misnamed (`fn Nmi()`) or mis-signatured (`fn irq(u8 x)`, or a non-`void`
-return) `interrupt`-qualified function does not fail compilation — it
-prints `WARN_INVALID_INTERRUPT` to stderr and silently compiles as an
-ordinary callable function, with the qualifier cleared before codegen ever
-sees it. The build **succeeds**; the vector table simply doesn't point at
-the intended handler. This is deliberate non-fatal-diagnostic design
-upstream, not a bug — but exactly the kind of thing a fuzzer/linter should
-flag as a distinct outcome class from a hard compile error.
-
-*(Source: the interrupt-validation block in `pass1_register_globals`,
-`analyzer.c`; not independently executed for this document, though the
-mechanism — clearing `is_interrupt` before codegen — is unambiguous from
-the code.)*
-
-### S-12: `asm` blocks are unvalidated
+### S-11: `asm` blocks are unvalidated
 
 The analyzer performs zero semantic checking on `asm { ... }` blocks —
 mnemonic legality is deferred entirely to codegen (explicitly noted in-code
@@ -628,7 +611,7 @@ analysis-stage diagnostic.
 *(Source: `analyze_stmt`'s `NODE_ASM_BLOCK` case in `analyzer.c`; not
 independently executed.)*
 
-### S-13: Unused-variable diagnostics are unimplemented
+### S-12: Unused-variable diagnostics are unimplemented
 
 `WARN_UNUSED_VARIABLE`, `WARN_UNUSED_FUNCTION`, `WARN_UNUSED_STRUCT`, and
 `WARN_UNUSED_FIELD` are all defined in the warning enum and have
@@ -641,7 +624,7 @@ exist yet.
 *(Source: `print_warning` in `errors.c` cross-referenced against
 `analyzer.c`; not independently executed.)*
 
-### S-14: Missing-return detection is shallow
+### S-13: Missing-return detection is shallow
 
 ```c
 fn f(u8 x) -> u8 {
@@ -664,7 +647,7 @@ easily-misread positive.
 
 *(Source: `stmt_may_return` in `analyzer.c`; not independently executed.)*
 
-### S-15: Negation doesn't change static signedness
+### S-14: Negation doesn't change static signedness
 
 ```c
 u8 x = 5;
@@ -683,7 +666,7 @@ doesn't re-trigger that special case.
 *(Source: literal-retyping logic in `resolve_expr_type`'s `NODE_UNARY`
 case, `analyzer.c`; not independently executed.)*
 
-### S-16: Struct field errors aren't poisoned
+### S-15: Struct field errors aren't poisoned
 
 Top-level declarations (vars/globals/registers/params) that fail type
 validation are poisoned to an error type in their symbol-table entry, so
@@ -697,7 +680,7 @@ declaration and can trigger further downstream diagnostics.
 *(Source: `validate_toplevel_types`'s per-field loop in `analyzer.c`; not
 independently executed.)*
 
-### S-17: Parameter poisoning doesn't reach the function signature
+### S-16: Parameter poisoning doesn't reach the function signature
 
 When a parameter's declared type fails validation, the poisoned type is
 written into a fresh local-scope symbol used for checking *uses of that
@@ -712,7 +695,7 @@ poisoned once, unlike the treatment globals/registers get.
 trigger in practice since it requires an invalid struct name in a
 parameter's type.)*
 
-### S-18: `ERR_WRONG_ARG_TYPE` is dead code
+### S-17: `ERR_WRONG_ARG_TYPE` is dead code
 
 `ERR_WRONG_ARG_TYPE` is defined in the error enum and has rendering support
 in `errors.c`, but is never actually constructed anywhere in `analyzer.c`
