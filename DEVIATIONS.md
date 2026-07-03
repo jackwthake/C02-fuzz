@@ -66,7 +66,7 @@ Severity legend:
 | [P2-6](#p2-6-global-allocation-never-checks-the-ram-ceiling) | P2 | Executed (bug_test.py) | Enough globals silently allocate past available RAM | n/a (codegen) |
 | [P2-7](#p2-7-pointer-arithmetic-is-unscaled) | P2 | Executed (bug_test.py) | Pointer arithmetic always steps by 1 byte regardless of pointee size | [§6.3](SPEC.md#63-binary-operators) |
 | [S-1](#s-1-voidnull-literal-conflation) | S | Executed | Any `void*` *value*, not just literal `0`, is compatible with any destination type | [§3.2](SPEC.md#32-type-compatibility) |
-| [S-2](#s-2-no-signedness-checking) | S | Source | `i8`↔`u8`, `i16`↔`u16` freely interconvert (width-only check) | [§3.2](SPEC.md#32-type-compatibility) |
+| [S-2](#s-2-no-signedness-checking) | S | Executed | Width-only check, no signedness comparison at all — same-width (`i8`↔`u8`) and cross-width (`i8`→`u16`) mismatches both freely interconvert | [§3.2](SPEC.md#32-type-compatibility) |
 | [S-3](#s-3-pointer-arithmetic-is-order-sensitive) | S | Executed | `ptr + 5` compiles, `5 + ptr` is a type error (spec now requires both to compile) | [§6.3](SPEC.md#63-binary-operators) |
 | [S-4](#s-4-casts-to-non-struct-types-are-unchecked) | S | Source | Casts to any non-struct destination have no relatedness check | [§3.3](SPEC.md#33-casts) |
 | [S-5](#s-5-lvalue-checking-is-shallow) | S | Source | Lvalue check is node-kind only, not chain-aware | [§7.3](SPEC.md#73-lvalues) |
@@ -82,6 +82,8 @@ Severity legend:
 | [S-15](#s-15-parameter-poisoning-doesnt-reach-the-function-signature) | S | Source | Call-site argument checks use the original, unpoisoned parameter type | n/a |
 | [S-16](#s-16-err_wrong_arg_type-is-dead-code) | S | Source | Argument type mismatches always report as generic `ERR_TYPE_MISMATCH` | [§8.1](SPEC.md#81-errors) |
 | [S-17](#s-17-bare-literal-0-bypasses-the-destination-type-check-entirely) | S | Executed | Literal `0` compatible with any destination, not just pointer types (e.g. `Point p = 0;`) | [§3.2](SPEC.md#32-type-compatibility) |
+| [S-18](#s-18-void-accepts-pointers-of-any-depth-not-just-depth-1) | S | Source | `void*` accepts a pointer of any depth (`u8**`, etc.), not just matching `ptr_depth 1` | [§3.2](SPEC.md#32-type-compatibility) |
+| [S-19](#s-19-pointer-pointee-types-silently-widen-like-scalar-values) | S | Executed | `u16 *q = someU8Ptr;` accepted — pointee mismatch treated as scalar widening | [§3.2](SPEC.md#32-type-compatibility) |
 
 ---
 
@@ -487,14 +489,20 @@ type-system gap in the language: it defeats static checking anywhere a
 ```c
 i8 x = 200;        // out of i8's range, fits u8 — accepted, wraps negative
 u8 y = someI8Var;  // accepted, no diagnostic
+u16 z = someI8Var; // cross-width AND cross-signedness — also accepted
 ```
 
-Type compatibility for same-width integer types only compares *width*
-(`type_width`), never signedness — `i8`↔`u8` and `i16`↔`u16` are always
-mutually "compatible" in both directions.
+Type compatibility never compares signedness at all, only *width*
+(`type_width`) — this holds both at equal width (`i8`↔`u8`, `i16`↔`u16`
+freely interconvert) and across widths (a signed value is accepted anywhere
+its width fits, regardless of whether the destination is signed or
+unsigned, e.g. `i8`→`u16`). `SPEC.md` §3.2 rule 8 requires `expected` and
+`actual` to agree on signedness *in addition to* the width check;
+`cc02`'s `is_types_compatible` only implements the width half.
 
-*(Source: `is_types_compatible` in `analyzer.c`; not independently executed
-for this document, but structurally unambiguous from the code.)*
+**Verified:** confirmed directly against the analyzer, not merely inferred
+from reading it — both the same-width and cross-width cases pass with no
+diagnostic.
 
 ### S-3: Pointer arithmetic is order-sensitive
 
@@ -736,3 +744,49 @@ not merely inferred from spec wording. Related to
 [S-1](#s-1-voidnull-literal-conflation), which documents the same
 missing-destination-check for non-literal `void*` *values*; this entry
 covers the base case of the literal itself.
+
+### S-18: `void*` accepts pointers of any depth, not just depth 1
+
+```c
+fn main() -> void {
+  u8 **pp;
+  void *vp = pp;  // ptr_depth mismatch (2 vs 1) — accepted with no diagnostic
+}
+```
+
+`SPEC.md` §3.2 rule 2 requires `actual`'s pointer depth to match
+`expected`'s (`ptr_depth 1`) before granting the `void*`-accepts-any-pointee
+exemption — a `u8**` is supposed to fall through to the ordinary
+depth-mismatch rejection (rules 3–4) and require an explicit cast, same as
+any other pointer-depth mismatch. `cc02`'s `is_types_compatible` doesn't
+compare depth in this branch at all — it treats *any* pointer, regardless
+of depth, as compatible with a `void*` destination, collapsing the depth
+information entirely.
+
+*(Source: `is_types_compatible` in `analyzer.c`; not independently executed
+for this document.)*
+
+### S-19: Pointer pointee types silently widen like scalar values
+
+```c
+fn main() -> void {
+  u8 x;
+  u8 *p = &x;
+  u16 *q = p;   // pointee mismatch (u8* -> u16*) — accepted with no diagnostic
+}
+```
+
+`SPEC.md` §3.2 rule 8 is only supposed to apply when both `expected` and
+`actual` are non-pointer values (`ptr_depth === 0`) — two pointers at the
+same depth with mismatched, non-void/non-struct pointee kinds are supposed
+to require an exact pointee match or an explicit cast, the same as a
+struct-name mismatch would. `cc02`'s `is_types_compatible` doesn't scope its
+width/signedness fallback to non-pointers: it applies the same
+`width(actual) <= width(expected)` logic (and, per
+[S-2](#s-2-no-signedness-checking), no signedness check either) to pointer
+pointee kinds exactly as it does to plain scalar values. So a `u8*` is
+silently accepted anywhere a `u16*` is expected, entirely bypassing pointer
+type-safety.
+
+**Verified:** confirmed directly against the compiler — `u16 *q = p;` (with
+`p` declared `u8*`) compiles with no diagnostic.

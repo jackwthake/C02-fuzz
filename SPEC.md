@@ -265,8 +265,15 @@ binary operands, struct-init fields). In order:
    mismatch — `Point p = 0;` is not meant to be a well-formed program (see
    [S-17](DEVIATIONS.md#s-17-bare-literal-0-bypasses-the-destination-type-check-entirely)
    for how `cc02` actually handles this today).
-2. Else if `expected` is `void*` and `actual` is *any* pointer type,
-   **compatible** — regardless of pointee type or pointer depth.
+2. Else if `expected` is `void*` (`kind === "void"`, `ptr_depth === 1`) and
+   `actual` is *any* pointer type **also at `ptr_depth === 1`**,
+   **compatible** — regardless of pointee kind, but depth must match. A
+   `u8**` (or any `ptr_depth >= 2` pointer) does **not** convert to `void*`
+   under this rule; it falls through to the ordinary depth-mismatch
+   rejection (rules 3–4) and needs an explicit cast, same as any other
+   depth mismatch (see
+   [S-18](DEVIATIONS.md#s-18-void-accepts-pointers-of-any-depth-not-just-depth-1)
+   for how `cc02` actually handles this today).
 3. Else if `expected.is_ptr != actual.is_ptr`, **not compatible**.
 4. Else if pointer depths differ, **not compatible**.
 5. Else if both are struct types, compatible iff the struct **names** match
@@ -274,9 +281,24 @@ binary operands, struct-init fields). In order:
 6. Else if the base kinds match (`u8`≡`u8`, but see the signedness note
    below), **compatible**.
 7. Else if either side is a struct or `void`, **not compatible**.
-8. Else, **compatible iff `width(actual) <= width(expected)`** — implicit
-   widening only (`u8`→`u16` OK; `u16`→`u8` requires an explicit cast).
-   `width` is 1 for `u8`/`i8`, 2 for `u16`/`i16`.
+8. Else, **only applicable when both `expected` and `actual` have
+   `ptr_depth === 0`** (i.e. neither is a pointer — by this point pointers
+   only reach here with matching depth and a non-void/non-struct pointee
+   mismatch, e.g. `u8*` vs `u16*`, and there is no pointee-widening for
+   pointers: an exact pointee-kind match, or an explicit cast, is required,
+   same as if this were a struct-name mismatch — see
+   [S-19](DEVIATIONS.md#s-19-pointer-pointee-types-silently-widen-like-scalar-values)
+   for how `cc02` actually handles this today). For two non-pointer
+   values, **compatible iff `signedness(actual) === signedness(expected)`
+   and `width(actual) <= width(expected)`** — implicit widening only within
+   the same signedness (`u8`→`u16` OK; `u16`→`u8` requires an explicit
+   cast). Crucially, this also means `u8`→`i16` (or any cross-signedness
+   pair) is **not** compatible even though it fits width-wise — crossing
+   signedness always requires an explicit cast, same as narrowing does.
+   `width` is 1 for `u8`/`i8`, 2 for `u16`/`i16`; `signedness` is unsigned
+   for `u8`/`u16`, signed for `i8`/`i16` (see
+   [S-2](DEVIATIONS.md#s-2-no-signedness-checking) for how `cc02` actually
+   handles this today).
 
 Rule 1 is exclusive to the **bare literal `0`** — it does not extend to a
 `void*`-typed variable or any other non-literal expression of type `void*`.
