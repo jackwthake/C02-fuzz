@@ -315,16 +315,28 @@ const binop_ops: op[] = [
   op.OP_BOR,
 ];
 
+const scalar_kinds: _type["kind"][] = ["u8", "i8", "u16", "i16"];
+
 // Scalar kinds that are same-signedness-as and no-wider-than `kind` - the
 // legal types for the "other" operand in the general widening set (SPEC.md
 // §6.3): the wider side (== target_type) determines the BinOp's result type,
 // so the narrower side just needs to widen into it without a signedness clash.
 function narrower_same_signedness(kind: _type["kind"]): _type[] {
-  const scalar_kinds: _type["kind"][] = ["u8", "i8", "u16", "i16"];
-
   return scalar_kinds
     .filter(k => signedness(k) === signedness(kind) && width(k) <= width(kind))
     .map(k => ({ kind: k, ptr_depth: 0 } as _type));
+}
+
+
+// A source type for a Cast, chosen independently of the destination - per
+// SPEC.md §3.3 an explicit cast has no relatedness check against its source
+// at all, so this is deliberately free to land on a different kind/width/
+// signedness than target_type (that mismatch is the interesting case for
+// differential testing - an identity cast never exercises the narrowing/
+// sign-reinterpretation rules).
+function random_scalar_type(): _type {
+  const kind = scalar_kinds[Math.floor(Math.random() * scalar_kinds.length)]!;
+  return { kind, ptr_depth: 0 } as _type;
 }
 
 
@@ -347,6 +359,13 @@ function next_binop_node(target_type: _type, symbol_table: Map<string, Symbol>[]
   const build_operand = (t: _type): Node => next_expr_node(t, symbol_table, depth + 1);
 
   return { kind: "BinOp", op: operation, left: build_operand(left_type), right: build_operand(right_type) };
+}
+
+
+// picks an independent scalar source type from target type, generates a cast
+function next_cast_node(target_type: _type, symbol_table: Map<string, Symbol>[], depth: number): Node {
+  const source_type = random_scalar_type();
+  return { kind: "Cast", type: target_type, expr: next_expr_node(source_type, symbol_table, depth + 1) };
 }
 
 
@@ -376,9 +395,11 @@ function next_expr_node(target_type: _type, symbol_table: Map<string, Symbol>[],
   }
 
   if (target_type.ptr_depth === 0 && target_type.kind !== "struct" && target_type.kind !== "void") {
-    candidates.push(() => {
-      return next_binop_node(target_type, symbol_table, depth);
-    });
+    candidates.push(() => next_binop_node(target_type, symbol_table, depth));
+  }
+
+  if (target_type.ptr_depth !== 0 || target_type.kind !== "struct") {
+    candidates.push(() => next_cast_node(target_type, symbol_table, depth));
   }
 
   // pick random candidate or generate a literal if none available
@@ -449,7 +470,7 @@ function main(): void {
     let t: _type = {  kind: "u8", ptr_depth: 0 };
     node = next_expr_node(t, symbol_table, 0);
     console.log(`Random expression:`, node);
-  } while (node.kind !== "BinOp")
+  } while (node.kind !== "Cast")
 
   process.exit(0); // Exit with success code
 }
