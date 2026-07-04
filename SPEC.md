@@ -700,8 +700,20 @@ Right-associative (self-recursive, so they stack: `!!x`, `--*p`, `&*p`):
 - Struct-typed operands are **not rejected** by the analyzer as long as both
   sides name the same struct — `pointA + pointB` "type-checks." See
   [P2-2](DEVIATIONS.md#p2-2-struct-values-accepted-as-arithmeticcondition-operands).
-- There is no distinct boolean/comparison result type — `a == b` has type
-  "whichever operand is wider," not a fixed 1-byte boolean.
+- **Result-type widening**: for any binary operator except `&&`/`||`, when
+  the two operands share signedness but differ in width, the result type is
+  the **wider** of the two operand types — the narrower operand is
+  implicitly widened before the operation executes (see Appendix B).
+  Mismatched signedness between operands is a type error regardless of
+  width (see the signedness note above) — width-widening only applies once
+  signedness already agrees. This includes comparisons: there is no
+  distinct boolean/comparison result type — `a == b` has type "whichever
+  operand is wider," not a fixed 1-byte boolean.
+- `&&` and `||` are the one exception to the above: they always produce a
+  **`u8`** result regardless of operand type or width, since they're
+  truthiness tests rather than width-preserving arithmetic (see
+  [S-20](DEVIATIONS.md#s-20-logical-operators-widen-their-result-instead-of-always-producing-u8)
+  for how `cc02` actually handles this today).
 
 ### 6.4 Postfix — Field Access
 

@@ -84,6 +84,7 @@ Severity legend:
 | [S-17](#s-17-bare-literal-0-bypasses-the-destination-type-check-entirely) | S | Executed | Literal `0` compatible with any destination, not just pointer types (e.g. `Point p = 0;`) | [§3.2](SPEC.md#32-type-compatibility) |
 | [S-18](#s-18-void-accepts-pointers-of-any-depth-not-just-depth-1) | S | Source | `void*` accepts a pointer of any depth (`u8**`, etc.), not just matching `ptr_depth 1` | [§3.2](SPEC.md#32-type-compatibility) |
 | [S-19](#s-19-pointer-pointee-types-silently-widen-like-scalar-values) | S | Executed | `u16 *q = someU8Ptr;` accepted — pointee mismatch treated as scalar widening | [§3.2](SPEC.md#32-type-compatibility) |
+| [S-20](#s-20-logical-operators-widen-their-result-instead-of-always-producing-u8) | S | Source | `&&`/`||` widen their result to the wider operand's type instead of always producing `u8` | [§6.3](SPEC.md#63-binary-operators) |
 
 ---
 
@@ -790,3 +791,26 @@ type-safety.
 
 **Verified:** confirmed directly against the compiler — `u16 *q = p;` (with
 `p` declared `u8*`) compiles with no diagnostic.
+
+### S-20: Logical operators widen their result instead of always producing u8
+
+```c
+fn main() -> void {
+  u8 a;
+  u16 b;
+  u8 flag = a && b;  // intended: always u8 - actually rejected/widened, needs a cast
+}
+```
+
+`SPEC.md` §6.3 states `&&`/`||` are the one exception to the general
+result-type widening rule — they're truthiness tests, so they're meant to
+always produce a `u8` result regardless of operand width. Per the IR
+generation code, `cc02` doesn't special-case them at all: they go through
+the same generic "result is the wider of the two operands" path as every
+other binary operator, so `a && b` above actually has type `u16` (matching
+`b`), not `u8` — meaning assigning it to a `u8`-declared destination fails
+the ordinary width check (rule 8) and needs an explicit cast, when the
+intended design says it never should.
+
+*(Source: IR generation code for `&&`/`||`; not independently executed for
+this document.)*
