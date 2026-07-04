@@ -293,7 +293,61 @@ function expr_literal(target_type: _type): Node {
   } else {
     return next_integer_literal(target_type);
   }
-} 
+}
+
+
+const binop_ops: op[] = [
+  op.OP_PLUS, 
+  op.OP_MINUS, 
+  op.OP_MULTIPLY, 
+  op.OP_DIVIDE, 
+  op.OP_MODULUS,
+  op.OP_LT, 
+  op.OP_GT, 
+  op.OP_LTE, 
+  op.OP_GTE,
+  op.OP_EQUALSEQUALS, 
+  op.OP_BANGEQUALS,
+  op.OP_LEFT_SHIFT, 
+  op.OP_RIGHT_SHIFT,
+  op.OP_BAND, 
+  op.OP_BXOR, 
+  op.OP_BOR,
+];
+
+// Scalar kinds that are same-signedness-as and no-wider-than `kind` - the
+// legal types for the "other" operand in the general widening set (SPEC.md
+// §6.3): the wider side (== target_type) determines the BinOp's result type,
+// so the narrower side just needs to widen into it without a signedness clash.
+function narrower_same_signedness(kind: _type["kind"]): _type[] {
+  const scalar_kinds: _type["kind"][] = ["u8", "i8", "u16", "i16"];
+
+  return scalar_kinds
+    .filter(k => signedness(k) === signedness(kind) && width(k) <= width(kind))
+    .map(k => ({ kind: k, ptr_depth: 0 } as _type));
+}
+
+
+function next_binop_node(target_type: _type, symbol_table: Map<string, Symbol>[], depth: number): Node {
+  const operation = binop_ops[Math.floor(Math.random() * binop_ops.length)]!;
+
+  const other_candidates = narrower_same_signedness(target_type.kind);
+  const other_type = other_candidates[Math.floor(Math.random() * other_candidates.length)]!;
+
+  // decide which side is forced to be exactly target_type (so its width wins
+  // the SPEC.md §6.3 widening rule) and which side gets the (maybe-narrower)
+  // other_type
+  const target_is_left = Math.random() < 0.5;
+  const left_type = target_is_left ? target_type : other_type;
+  const right_type = target_is_left ? other_type : target_type;
+
+  // single choke point for building an operand - once Cast generation
+  // exists, this is the one place that'd sometimes wrap the result instead
+  // of returning it plain
+  const build_operand = (t: _type): Node => next_expr_node(t, symbol_table, depth + 1);
+
+  return { kind: "BinOp", op: operation, left: build_operand(left_type), right: build_operand(right_type) };
+}
 
 
 function next_expr_node(target_type: _type, symbol_table: Map<string, Symbol>[], depth: number): Node {
@@ -319,6 +373,12 @@ function next_expr_node(target_type: _type, symbol_table: Map<string, Symbol>[],
         });
       }
     }
+  }
+
+  if (target_type.ptr_depth === 0 && target_type.kind !== "struct" && target_type.kind !== "void") {
+    candidates.push(() => {
+      return next_binop_node(target_type, symbol_table, depth);
+    });
   }
 
   // pick random candidate or generate a literal if none available
@@ -389,7 +449,7 @@ function main(): void {
     let t: _type = {  kind: "u8", ptr_depth: 0 };
     node = next_expr_node(t, symbol_table, 0);
     console.log(`Random expression:`, node);
-  } while (node.kind !== "Call")
+  } while (node.kind !== "BinOp")
 
   process.exit(0); // Exit with success code
 }
