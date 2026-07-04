@@ -323,8 +323,6 @@ type/depth (rules 3–4) — **not** compatible with a non-pointer destination.
 > This is not the intended design (§3.2 rule 1 above states the intended,
 > pointer-only scope).
 
-**Signedness is checked**, Implicit casting between signed and unsigned types is not allowed.
-
 **BinOP expression with mixed signedness**: A binary operator with one signed and one unsigned operand is a type error; an explicit cast on one operand is required.
 
 > ⚠ [S-2](DEVIATIONS.md#s-2-no-signedness-checking): `i8 x = 200;` and
