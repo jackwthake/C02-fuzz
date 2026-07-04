@@ -369,6 +369,13 @@ function next_cast_node(target_type: _type, symbol_table: Map<string, Symbol>[],
 }
 
 
+// dereferences *target_type to target_type
+function next_deref_node(target_type: _type, symbol_table: Map<string, Symbol>[], depth: number): Node {
+  const ptr_type: _type = { ...target_type, ptr_depth: target_type.ptr_depth + 1 };
+  return { kind: "Deref", expr: next_expr_node(ptr_type, symbol_table, depth + 1) };
+}
+
+
 function next_expr_node(target_type: _type, symbol_table: Map<string, Symbol>[], depth: number): Node {
   if (depth >= max_depth) {
     return expr_literal(target_type);
@@ -400,6 +407,10 @@ function next_expr_node(target_type: _type, symbol_table: Map<string, Symbol>[],
 
   if (target_type.ptr_depth !== 0 || target_type.kind !== "struct") {
     candidates.push(() => next_cast_node(target_type, symbol_table, depth));
+  }
+
+  if (target_type.ptr_depth < max_ptr_depth && !(target_type.kind === "void" && target_type.ptr_depth === 0)) {
+    candidates.push(() => next_deref_node(target_type, symbol_table, depth));
   }
 
   // pick random candidate or generate a literal if none available
@@ -464,13 +475,14 @@ function main(): void {
   let node: Node;
 
   symbol_table[0].set("x", { kind: "var", type: { kind: "u8", ptr_depth: 0 } });
+  symbol_table[0].set("y", { kind: "var", type: { kind: "u8", ptr_depth: 1 } });
   symbol_table[0].set("test", { kind: "func", returnType : { kind: "u8", ptr_depth: 0 }, params: [ { kind: "u8", ptr_depth: 0 } ] });
   
   do {
     let t: _type = {  kind: "u8", ptr_depth: 0 };
     node = next_expr_node(t, symbol_table, 0);
     console.log(`Random expression:`, node);
-  } while (node.kind !== "Cast")
+  } while (node.kind !== "Deref")
 
   process.exit(0); // Exit with success code
 }
