@@ -115,6 +115,116 @@ function next_deref_node(target_type: _type, symbol_table: Map<string, Symbol>[]
 }
 
 
+// return a positive number that when passed to unary op negate will create a negative signed integer
+function next_signed_integer_thats_positive(target_type: _type): Node {
+  if (target_type.ptr_depth !== 0) {
+    throw new Error(`Unhandled type: ${target_type.kind}`);
+  }
+
+  switch(target_type.kind) {
+    case 'i8':
+      return { kind: "IntLit", value: Math.floor(Math.random() * 128) + 1, type: target_type };   // 1..128
+    case 'i16':
+      return { kind: "IntLit", value: Math.floor(Math.random() * (32768 - 129 + 1)) + 129, type: target_type };  // 129..32768
+    default:
+      throw new Error(`Unhandled type: ${target_type.kind}`);
+  }
+}
+
+
+// exact type match (kind, ptr_depth, and struct name) - unlike
+// is_type_compatible, this allows no widening. Needed for &'s operand: &'s
+// result type is derived directly from the operand's own declared type, not
+// through a widening context, so a merely-compatible-but-narrower operand
+// would silently produce the wrong pointer type.
+function is_exact_type_match(a: _type, b: _type): boolean {
+  if (a.ptr_depth !== b.ptr_depth) return false;
+  if (a.kind === "struct" || b.kind === "struct") {
+    return a.kind === "struct" && b.kind === "struct" && a.name === b.name;
+  }
+  return a.kind === b.kind;
+}
+
+
+// picks an lvalue-shaped operand (Identifier/Deref per SPEC.md §7.3, checked
+// shallowly) of exactly `type` - shared by & (whose result type is derived
+// directly from the operand's own declared type, no widening context) and
+// ++/-- (which read-modify-write the same storage, so the operand must
+// already be exactly `type`). A Deref-shaped operand is always
+// constructible (bottoms out at a null-pointer literal if nothing else is
+// available), so this never needs to fall back to a literal - and per
+// DEVIATIONS.md P1-1/P0-4, &(*p) and ++(*p) are real cc02 bugs, which is
+// exactly the kind of shape this fuzzer should keep generating, not avoid.
+function next_lvalue_node(type: _type, symbol_table: Map<string, Symbol>[], depth: number): Node {
+  let candidates: (() => Node)[] = [];
+
+  for (const scope of symbol_table) {
+    for (const [name, sym] of scope.entries()) {
+      if (sym.kind === "var" && is_exact_type_match(type, sym.type)) {
+        candidates.push(() => ({ kind: "Identifier", name, type: sym.type }));
+      }
+    }
+  }
+
+  candidates.push(() => next_deref_node(type, symbol_table, depth));
+
+  return candidates[Math.floor(Math.random() * candidates.length)]!();
+}
+
+
+// address-of: target_type must be a pointer; the operand is an lvalue of
+// exactly the pointee type.
+function next_addressof_node(target_type: _type, symbol_table: Map<string, Symbol>[], depth: number): Node {
+  const operand_type: _type = { ...target_type, ptr_depth: target_type.ptr_depth - 1 };
+  return { kind: "UnOp", op: op.OP_ADDRESSOF, expr: next_lvalue_node(operand_type, symbol_table, depth) };
+}
+
+
+function next_unop_node(target_type: _type, symbol_table: Map<string, Symbol>[], depth: number): Node {
+  let candidates: (() => Node)[] = [];
+
+  if (target_type.ptr_depth === 0 && target_type.kind !== "struct" && target_type.kind !== "void") {
+    candidates.push(() => {
+      return { kind: "UnOp", op: op.OP_BNOT, expr: next_expr_node(target_type, symbol_table, depth + 1) } as Node;
+    })
+
+    candidates.push(() => {
+      return { kind: "UnOp", op: op.OP_NEGATE, expr: next_expr_node(target_type, symbol_table, depth + 1) };
+    })
+
+    // confirmed by testing (SPEC.md §6.2): unlike &&/||, ! is type-preserving,
+    // not forced to u8
+    candidates.push(() => {
+      return { kind: "UnOp", op: op.OP_BANG, expr: next_expr_node(target_type, symbol_table, depth + 1) };
+    })
+
+    if (target_type.kind === "i8" || target_type.kind === "i16") {
+      candidates.push(() => {
+        return { kind: "UnOp", op: op.OP_NEGATE, expr: next_signed_integer_thats_positive(target_type) };
+      })
+    }
+  }
+
+  // & needs its own guard: target must be a pointer, and the operand type
+  // (target_type with ptr_depth - 1) must be a constructible type - bare
+  // void (ptr_depth 0) can't be an operand, since no variable can have that
+  // type and Deref is likewise never allowed to produce one.
+  if (target_type.ptr_depth >= 1 && !(target_type.kind === "void" && target_type.ptr_depth === 1)) {
+    candidates.push(() => next_addressof_node(target_type, symbol_table, depth));
+  }
+
+  // ++/-- are type-preserving like ~/-, but unlike them pointers are fair
+  // game (++ptr is fine per SPEC.md §5.8) - only struct and bare void are
+  // excluded, the latter for the same reason as &'s guard above.
+  if (target_type.kind !== "struct" && !(target_type.kind === "void" && target_type.ptr_depth === 0)) {
+    candidates.push(() => ({ kind: "UnOp", op: op.OP_INCREMENT, expr: next_lvalue_node(target_type, symbol_table, depth) }));
+    candidates.push(() => ({ kind: "UnOp", op: op.OP_DECREMENT, expr: next_lvalue_node(target_type, symbol_table, depth) }));
+  }
+
+  return candidates[Math.floor(Math.random() * candidates.length)]!();
+}
+
+
 export function next_expr_node(target_type: _type, symbol_table: Map<string, Symbol>[], depth: number): Node {
   if (depth >= max_depth) {
     return expr_literal(target_type);
@@ -142,6 +252,13 @@ export function next_expr_node(target_type: _type, symbol_table: Map<string, Sym
 
   if (target_type.ptr_depth === 0 && target_type.kind !== "struct" && target_type.kind !== "void") {
     candidates.push(() => next_binop_node(target_type, symbol_table, depth));
+  }
+
+  const unop_scalar_ok = target_type.ptr_depth === 0 && target_type.kind !== "struct" && target_type.kind !== "void";
+  const unop_addressof_ok = target_type.ptr_depth >= 1 && !(target_type.kind === "void" && target_type.ptr_depth === 1);
+  const unop_incdec_ok = target_type.kind !== "struct" && !(target_type.kind === "void" && target_type.ptr_depth === 0);
+  if (unop_scalar_ok || unop_addressof_ok || unop_incdec_ok) {
+    candidates.push(() => next_unop_node(target_type, symbol_table, depth));
   }
 
   if (target_type.ptr_depth !== 0 || target_type.kind !== "struct") {

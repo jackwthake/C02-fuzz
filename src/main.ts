@@ -19,7 +19,7 @@ function main(): void {
     let t: _type = {  kind: "u8", ptr_depth: 0 };
     node = next_expr_node(t, symbol_table, 0);
     console.log(`Random expression:`, node);
-  } while (node.kind !== "Deref")
+  } while (node.kind !== "UnOp")
 
   process.exit(0); // Exit with success code
 }
