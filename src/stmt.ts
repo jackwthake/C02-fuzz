@@ -10,20 +10,26 @@ import { next_expr_node } from './expr.js'
 import { max_depth, max_block_stmts } from './const.js'
 
 
-let next_var_id = 0;
+const next_name_ids = new Map<string, number>();
 
-// fresh, globally-unique variable name - SPEC.md §7.2 disallows shadowing
-// (not just same-scope redeclaration), checked against every enclosing
-// scope up to global, so a monotonic counter sidesteps the check entirely
-// rather than needing to search the whole scope stack for a free name.
-function next_var_name(): string {
-  return `v${next_var_id++}`;
+// fresh, unique-per-prefix name - SPEC.md §7.2 disallows shadowing (not just
+// same-scope redeclaration), checked against every enclosing scope up to
+// global, and functions/structs/globals/locals all share one namespace. A
+// monotonic counter per prefix sidesteps the check entirely rather than
+// needing to search the whole scope stack for a free name - distinct
+// prefixes (e.g. "v" for locals, "f" for functions) can never collide with
+// each other regardless of their counters, so callers can also tell one
+// category of name from another at a glance.
+export function next_fresh_name(prefix: string): string {
+  const id = next_name_ids.get(prefix) ?? 0;
+  next_name_ids.set(prefix, id + 1);
+  return `${prefix}${id}`;
 }
 
 
 function next_vardecl_node(symbol_table: Map<string, Symbol>[], depth: number): Node {
   const type = next_type(symbol_table, false, depth);
-  const name = next_var_name();
+  const name = next_fresh_name("v");
 
   // a bare struct type has no literal fallback yet (Name{...} initializer
   // expressions aren't generated anywhere) - SPEC.md §5.1 shows exactly this
