@@ -47,13 +47,41 @@ function next_vardecl_node(symbol_table: Map<string, Symbol>[], depth: number): 
 }
 
 
+function next_return_node(return_type: _type, symbol_table: Map<string, Symbol>[], depth: number): Node {
+  if (return_type.kind === "void" && return_type.ptr_depth === 0) {
+    return { kind: "Return" };
+  }
+
+  return { kind: "Return", value: next_expr_node(return_type, symbol_table, depth + 1) };
+}
+
+
 export function next_stmt_node(return_type: _type, block_depth: number, symbol_table: Map<string, Symbol>[], depth: number): Node {
   if (block_depth === 0 && depth < max_depth) {
     let stmts: Node[] = [];
 
-    for (let i = 0; i < Math.floor(Math.random() * max_block_stmts); ++i) {
-      stmts.push(next_stmt_node(return_type, block_depth + 1, symbol_table, depth + 1))
-    } 
+    let num_stmts = Math.floor(Math.random() * max_block_stmts);
+
+    const needs_return = !(return_type.kind === "void" && return_type.ptr_depth === 0);
+    // a 0-statement body would otherwise skip the forced-return check below entirely
+    if (needs_return && num_stmts === 0) num_stmts = 1;
+
+    for (let i = 0; i < num_stmts; ++i) {
+      let stmt: Node;
+
+      // if we're the last node in the body and the return type isn't bare void
+      // we have to return something
+      if (i === num_stmts - 1 && needs_return) {
+        stmt = next_return_node(return_type, symbol_table, depth + 1);
+      } else {
+        stmt = next_stmt_node(return_type, block_depth + 1, symbol_table, depth + 1);
+      }
+      
+      stmts.push(stmt);
+
+      // no point generating more statements after a return - they'd never run
+      if (stmt.kind === "Return") break;
+    }
 
     return { kind: "Block", stmts: stmts };
   }
@@ -62,6 +90,7 @@ export function next_stmt_node(return_type: _type, block_depth: number, symbol_t
   let candidates: (() => Node)[] = [];
 
   candidates.push(() => next_vardecl_node(symbol_table, depth));
+  candidates.push(() => next_return_node(return_type, symbol_table, depth + 1))
 
   return candidates[Math.floor(Math.random() * candidates.length)]!();
 }

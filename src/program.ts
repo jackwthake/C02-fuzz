@@ -1,4 +1,4 @@
-import type { _type } from "./types.js";
+import { next_type, type _type } from "./types.js";
 import type { Symbol } from "./scope.js";
 import type { Node } from "./ast.js";
 
@@ -34,8 +34,11 @@ export const run_path = `${generated_path}/run_${format_run_folder_name(new Date
 
 
 function next_top_level_node(symbol_table: Map<string, Symbol>[], is_main: boolean): Node {
-  let return_type: _type = { kind: "void", ptr_depth: 0 };
+  let return_type: _type = is_main ? { kind: "void", ptr_depth: 0 } : next_type(symbol_table, true, 0);
   let name = is_main ? "main" : next_fresh_name("f");
+
+  // add ourselves to global symbol table
+  symbol_table[symbol_table.length - 1]!.set(name, { kind: "func", params: [], returnType: return_type });
 
   // function body gets its own scope (SPEC.md §7.2) - locals shouldn't leak
   // into global or into other functions' bodies

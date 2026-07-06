@@ -72,10 +72,16 @@ export function print_node(node: Node, indent: number = 0): string {
 
     case "Program":
       return node.body.map(n => print_node(n, indent)).join("\n\n");
+    
+    case "Return": {
+      if (node.value)
+        return `${indent_str(indent)}return ${print_node(node.value, 0)};\n`;
+
+      return `${indent_str(indent)}return;\n`;
+    }
 
     case "StructInit":
     case "Assign":
-    case "Return":
     case "Break":
     case "Continue":
     case "If":
