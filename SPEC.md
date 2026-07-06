@@ -362,13 +362,7 @@ signed type from the negated value.
 
 **Explicit Casting between signed and unsigned**: An explicit signed ↔ unsigned cast is bit-pattern-preserving (two's-complement reinterpretation), matching the wraparound semantics used elsewhere in the integer model.
 
-**negating an unsigned type promotes the result to its signed counterpart**: `-x` where x is `u8` promotes the result to a `i8`.
-The result follows standard two's-complement wraparound, matching the width's existing overflow behavior (§Appendix B); no range check is performed at compile or runtime.
-
-> ⚠ [S-13](DEVIATIONS.md#s-13-negation-doesnt-change-static-signedness):
-> negating a *variable* never changes its static type (`-x` on a `u8` is
-> still typed `u8`), and double literal negation (`-(-5)`) doesn't re-fold
-> to the positive literal's type.
+**Negation is type-preserving**: `-x` retains `x`'s exact type — signedness and width are unchanged (a negated `u8` is still `u8`), following standard two's-complement wraparound (§Appendix B); no range check is performed at compile or runtime. This applies to any negated expression other than a bare literal, which instead follows the literal-typing special case above.
 
 ---
 
@@ -673,6 +667,12 @@ Right-associative (self-recursive, so they stack: `!!x`, `--*p`, `&*p`):
 | `~` | bitwise not |
 | `++` / `--` | prefix increment/decrement (operand must be an lvalue) |
 | `*` / `@` | pointer dereference — **`*p` and `@p` are interchangeable spellings of the identical operation** |
+
+`!`, `-`, `~`, and `++`/`--` are all type-preserving: the result has the exact
+same type as the operand, no widening or signedness change (§3.4 covers `-`'s
+one exception, the bare-literal fold). Unlike `&&`/`||` (§6.3), `!` does not
+force a `u8` result — `u8 a = !x;` on an `i16 x` is a type error, while
+`i16 b = !x;` type-checks. **Verified.**
 
 ### 6.3 Binary Operators
 

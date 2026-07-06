@@ -77,7 +77,6 @@ Severity legend:
 | [S-10](#s-10-asm-blocks-are-unvalidated) | S | Source | No analyzer-level check on `asm` mnemonic legality | [§5.7](SPEC.md#57-inline-assembly-asm) |
 | [S-11](#s-11-unused-variable-diagnostics-are-unimplemented) | S | Source | `WARN_UNUSED_*` exist in the enum but are never emitted | [§8.2](SPEC.md#82-warnings) |
 | [S-12](#s-12-missing-return-detection-is-shallow) | S | Source | Last-statement-kind check only, not control-flow analysis | [§7.5](SPEC.md#75-missing-return-detection) |
-| [S-13](#s-13-negation-doesnt-change-static-signedness) | S | Source | `-x` on a `u8` variable is still typed `u8`; double literal negation doesn't refold | [§3.4](SPEC.md#34-integer-literal-typing) |
 | [S-14](#s-14-struct-field-errors-arent-poisoned) | S | Source | A bad struct field can re-trigger diagnostics at every access site | n/a |
 | [S-15](#s-15-parameter-poisoning-doesnt-reach-the-function-signature) | S | Source | Call-site argument checks use the original, unpoisoned parameter type | n/a |
 | [S-16](#s-16-err_wrong_arg_type-is-dead-code) | S | Source | Argument type mismatches always report as generic `ERR_TYPE_MISMATCH` | [§8.1](SPEC.md#81-errors) |
@@ -660,25 +659,6 @@ one of the five "may-return" kinds — a technically-correct but
 easily-misread positive.
 
 *(Source: `stmt_may_return` in `analyzer.c`; not independently executed.)*
-
-### S-13: Negation doesn't change static signedness
-
-```c
-u8 x = 5;
--x;          // still typed u8 by the analyzer, despite representing a
-             // two's-complement negative value at runtime
--(-5);       // the outer negate does NOT re-fold to u8 — only a unary
-             // negate directly wrapping a NODE_NUMBER hits the
-             // literal-retyping fast path; here it wraps another negate
-```
-
-Negating a *variable* never changes its static type. Negating a *literal*
-re-derives a signed type only when the AST shape is exactly
-`NODE_UNARY(-)` directly wrapping `NODE_NUMBER` — a second, outer negation
-doesn't re-trigger that special case.
-
-*(Source: literal-retyping logic in `resolve_expr_type`'s `NODE_UNARY`
-case, `analyzer.c`; not independently executed.)*
 
 ### S-14: Struct field errors aren't poisoned
 
